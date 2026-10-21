@@ -7,6 +7,10 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 WorkingDirectory=%h/php-build
+# Перед сборкой подтянуть свежие скрипты из репозитория. "-": если сети нет
+# или каталог не git-клон (машина ещё на ручной раскладке) — собираем тем,
+# что есть, а не валим сборку. --ff-only: локальные правки не мержим молча.
+ExecStartPre=-git -C %h/php-build pull --ff-only
 ExecStart=%h/php-build/build-rc.sh
 # Пререлиз собирается с нуля каждый раз (--no-cache --pull), на riscv64 это долго
 TimeoutStartSec=infinity
