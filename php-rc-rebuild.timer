@@ -1,0 +1,18 @@
+[Unit]
+Description=Weekly PHP prerelease rebuild (Mon 09:00 Asia/Almaty)
+
+[Timer]
+Unit=php-rc-rebuild.service
+# Таймзона задана явно: у VPS системная TZ europe/berlin, а расписание по Алматы.
+# 09:00 Алматы = 04:00 UTC — намеренно подальше от полуночи UTC, потому что
+# дата в теге 8.6-rc-YYYYMMDD берётся по UTC. Уползи запуск через полночь,
+# машины проставили бы разные даты и вместо одного снимка вышло бы три
+# одноархитектурных.
+OnCalendar=Mon *-*-* 09:00:00 Asia/Almaty
+# Разводим три машины по времени, чтобы не долбить Hub одновременно
+RandomizedDelaySec=30m
+# Одноплатник мог быть выключен — догнать пропущенный запуск
+Persistent=true
+
+[Install]
+WantedBy=timers.target

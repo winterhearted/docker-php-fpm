@@ -1,0 +1,15 @@
+[Unit]
+Description=PHP-FPM images: check for new upstream patches and rebuild
+Documentation=file:%h/php-build/check-updates.sh
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/php-build
+ExecStart=%h/php-build/check-updates.sh
+# Сборка php с imagick на riscv64 идёт часами — дефолтный старт-таймаут её убьёт
+TimeoutStartSec=infinity
+# Машины не выделенные под сборку, не мешаем остальному
+Nice=10
+IOSchedulingClass=idle

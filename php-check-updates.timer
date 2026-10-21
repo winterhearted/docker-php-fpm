@@ -1,0 +1,14 @@
+[Unit]
+Description=Nightly PHP-FPM image update check (03:00 Asia/Almaty)
+
+[Timer]
+Unit=php-check-updates.service
+# Таймзона задана явно: у VPS системная TZ europe/berlin, а расписание нужно по Алматы
+OnCalendar=*-*-* 03:00:00 Asia/Almaty
+# Разводим три машины по времени, чтобы не долбить Hub одновременно
+RandomizedDelaySec=20m
+# Одноплатник мог быть выключен ночью — догнать пропущенный запуск
+Persistent=true
+
+[Install]
+WantedBy=timers.target

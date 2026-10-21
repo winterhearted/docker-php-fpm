@@ -1,0 +1,27 @@
+# Вариант -vips: базовый образ плюс libvips и включённый ffi.
+# Строится поверх уже собранного локального образа (BASE_IMAGE), а не с нуля —
+# пересобирать расширения ради одного apt-пакета на riscv64 это часы.
+#
+# pecl-расширение vips заброшено с 8.0, поэтому его тут нет: работать с libvips
+# полагается через FFI (jcupitt/php-vips 2.x).
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+
+RUN set -eux; \
+    apt-get update; \
+    # имя пакета версионное и с суффиксами (libvips42t64, дальше будет другое) —
+    # берём максимальное
+    pkg="$(apt-cache --names-only search '^libvips[0-9][0-9a-z]*$' | cut -d' ' -f1 | sort -V | tail -1)"; \
+    [ -n "$pkg" ] || { echo "не нашла пакет libvipsN в apt" >&2; exit 1; }; \
+    apt-get install -y --no-install-recommends "$pkg"; \
+    rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/* /tmp/* /var/tmp/*; \
+    soname="$(dpkg -L "$pkg" | grep -oE 'libvips\.so\.[0-9]+$' | head -1)"; \
+    [ -n "$soname" ] || { echo "в $pkg нет libvips.so.N" >&2; exit 1; }; \
+    echo "libvips: $pkg ($soname)"; \
+    # ругнётся "readelf: not found" — binutils в рантайме нет. Не страшно:
+    # readelf там нужен только чтобы отличить zend-расширение, а ffi обычное.
+    docker-php-ext-enable ffi; \
+    # FFI::cdef прямо из кода, а не только через preload — иначе php-vips не заведётся
+    echo 'ffi.enable=1' > /usr/local/etc/php/conf.d/zz-ffi.ini; \
+    ldconfig; \
+    php -r '$v = FFI::cdef("const char *vips_version_string(void);", "'"$soname"'"); echo "vips ", $v->vips_version_string(), PHP_EOL;'

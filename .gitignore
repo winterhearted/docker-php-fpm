@@ -1,0 +1,22 @@
+# Claude Code local settings
+.claude/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Состояние конкретной машины (последний собранный патч и дайджесты базы) —
+# у каждой сборочной машины своё
+.build-state
+.build-state.tmp
+.base-digests.state

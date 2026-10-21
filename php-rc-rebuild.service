@@ -1,0 +1,15 @@
+[Unit]
+Description=PHP-FPM prerelease (8.6-rc): weekly rebuild from upstream alpha/RC
+Documentation=file:%h/php-build/build-rc.sh
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/php-build
+ExecStart=%h/php-build/build-rc.sh
+# Пререлиз собирается с нуля каждый раз (--no-cache --pull), на riscv64 это долго
+TimeoutStartSec=infinity
+# Машины не выделенные под сборку, не мешаем остальному
+Nice=10
+IOSchedulingClass=idle
