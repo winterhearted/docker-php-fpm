@@ -68,9 +68,13 @@ RUN set -eux; \
 # и собранных .so, а не списком руками: список руками гниёт на каждом релизе.
 # realpath обязателен: ldd печатает merged-usr пути (/lib/...), а dpkg владеет
 # /usr/lib/... — без канонизации dpkg-query молча не находит почти ничего.
+# Coder-модули ImageMagick imagick грузит через dlopen, так что их зависимости
+# (libheif для AVIF/HEIC и т.п.) в ldd самого imagick.so не видны — сканируем
+# и модули.
 RUN set -eux; \
     extdir="$(php -r 'echo ini_get("extension_dir");')"; \
     ldd /usr/local/bin/php /usr/local/sbin/php-fpm "$extdir"/*.so \
+        /usr/lib/*/ImageMagick-*/modules-*/coders/*.so \
         | awk '/=> \//{print $3}' \
         | sort -u \
         | xargs -r realpath -e \
@@ -85,6 +89,16 @@ RUN set -eux; \
     if [ -n "$core" ] && apt-cache show "${core}-extra" >/dev/null 2>&1; then \
         echo "${core}-extra" >> /runtime-deps.txt; \
     fi; \
+    # То же с рекомендациями libheif и ImageMagick: энкодеры AVIF/HEIC
+    # (libheif-plugin-aomenc/x265) libheif грузит через dlopen, ghostscript и
+    # шрифты imagick вызывает для PDF/EPS и текста. В ldd их нет, а рантайм
+    # ставится с --no-install-recommends — без этого imagick молча перестаёт
+    # писать AVIF.
+    for p in $(grep -E '^(libheif[0-9]|libmagickcore-)' /runtime-deps.txt); do \
+        apt-cache show --no-all-versions "$p" \
+            | sed -n 's/^Recommends: //p' \
+            | tr ',' '\n' | sed 's/^ *//; s/[ |(].*//'; \
+    done >> /runtime-deps.txt; \
     echo ca-certificates >> /runtime-deps.txt; \
     sort -u -o /runtime-deps.txt /runtime-deps.txt; \
     cat /runtime-deps.txt; \
@@ -130,7 +144,10 @@ RUN set -eux; \
     # Проверяем через extension_loaded, а не грепом по `php -m`: там имена
     # печатаются как зарегистрированы, и opcache, например, зовётся
     # "Zend OPcache".
-    php -r '$need = ["mbstring","imagick","gd","intl","zip","pdo_mysql","pdo_pgsql","mysqli","bcmath","exif","soap","curl","openssl","Zend OPcache","sodium"]; $miss = array_values(array_filter($need, fn($e) => !extension_loaded($e))); if ($miss) { fwrite(STDERR, "нет расширений: " . implode(", ", $miss) . PHP_EOL); exit(1); } if (!function_exists("mb_substr")) { fwrite(STDERR, "mbstring есть, а mb_substr нет" . PHP_EOL); exit(1); } echo "проверка расширений пройдена", PHP_EOL;'
+    php -r '$need = ["mbstring","imagick","gd","intl","zip","pdo_mysql","pdo_pgsql","mysqli","bcmath","exif","soap","curl","openssl","Zend OPcache","sodium"]; $miss = array_values(array_filter($need, fn($e) => !extension_loaded($e))); if ($miss) { fwrite(STDERR, "нет расширений: " . implode(", ", $miss) . PHP_EOL); exit(1); } if (!function_exists("mb_substr")) { fwrite(STDERR, "mbstring есть, а mb_substr нет" . PHP_EOL); exit(1); } echo "проверка расширений пройдена", PHP_EOL;'; \
+    # AVIF imagick пишет через плагин libheif, который подгружается только в
+    # момент записи — php -m его отсутствия не заметит
+    php -r '$i = new Imagick(); $i->newImage(8, 8, "red"); $i->setImageFormat("avif"); exit(strlen($i->getImageBlob()) > 0 ? 0 : 1);'
 
 WORKDIR /var/www/html
 
