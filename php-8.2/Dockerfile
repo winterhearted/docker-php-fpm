@@ -98,6 +98,8 @@ RUN set -eux; \
 
 COPY --from=builder /usr/local /usr/local
 COPY docker-entrypoint.sh /usr/local/bin/
+COPY 00-defaults.ini /usr/local/etc/php/conf.d/
+COPY zz-defaults.conf /usr/local/etc/php-fpm.d/
 
 RUN set -eux; \
     ldconfig; \
@@ -107,6 +109,7 @@ RUN set -eux; \
     chmod 1777 /var/www/html; \
     php -v; \
     php -m; \
+    php-fpm -t; \
     # AVIF imagick пишет через плагин libheif, который подгружается только в
     # момент записи — php -m его отсутствия не заметит
     php -r '$i = new Imagick(); $i->newImage(8, 8, "red"); $i->setImageFormat("avif"); exit(strlen($i->getImageBlob()) > 0 ? 0 : 1);'

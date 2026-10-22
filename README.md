@@ -39,7 +39,9 @@ Because stitching is a pure recalculation from the registry, machines don't coor
 php-X.Y/
   Dockerfile             base image; 8.2+ take ARG PHP_BASE (e.g. 8.4.26-fpm)
   Dockerfile.<variant>   optional variant built on top (ARG BASE_IMAGE), e.g. Dockerfile.vips
-  docker-entrypoint.sh   turns PHP_* env vars into conf.d/*.ini
+  docker-entrypoint.sh   turns PHP_* env vars into conf.d/*.ini, PHP_FPM_* into php-fpm.d/zz-env.conf
+  00-defaults.ini        8.2+: image's php.ini defaults (loaded first, env overrides)
+  zz-defaults.conf       8.2+: image's FPM pool defaults (env and later-sorted files override)
 engine.sh                docker/podman abstraction, sourced by every script
 architectures.conf       arches stitch.sh merges; keep identical on all machines
 check-updates.sh         nightly: find new upstream patches, build them, stitch

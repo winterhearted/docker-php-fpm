@@ -48,8 +48,34 @@ One difference worth knowing: imagick is built from its git master here, because
 | `PHP_UPLOAD_MAX_FILESIZE` | e.g. `100M` |
 | `PHP_ENABLE_OPCACHE` | `1`/`0`, CLI included |
 | `PHP_ENABLE_JIT` | `1`/`0`, 8.0+ |
+| `PHP_DISPLAY_ERRORS` | `1`/`0`, 8.2+. `0` keeps errors out of responses and only logs them |
+| `PHP_ERROR_LOG` | `error_log`, a file path, 8.2+ |
 
 Leave one unset and you get PHP's default. Each just drops a file into `conf.d/`, nothing clever going on.
+
+There's no `php.ini` in the image, so out of the box errors are printed into the response. FPM always logs them too, to `docker logs` or to the `PHP_ERROR_LOG` file if set; `PHP_DISPLAY_ERRORS=0` leaves them only in the log. The CLI just prints, so nothing is doubled in stderr. The file's directory must be writable by `www-data`; if it isn't, PHP falls back to `docker logs`, so nothing gets lost.
+
+FPM pool, 8.2+:
+
+| Var | Sets | Default |
+|---|---|---|
+| `PHP_FPM_PM` | `pm`: `dynamic`, `ondemand`, `static` | `dynamic` |
+| `PHP_FPM_MAX_CHILDREN` | `pm.max_children` | `12` |
+| `PHP_FPM_START_SERVERS` | `pm.start_servers` | `3` |
+| `PHP_FPM_MIN_SPARE_SERVERS` | `pm.min_spare_servers` | `2` |
+| `PHP_FPM_MAX_SPARE_SERVERS` | `pm.max_spare_servers` | `5` |
+| `PHP_FPM_MAX_REQUESTS` | `pm.max_requests` | `500` |
+
+Set only `PHP_FPM_MAX_CHILDREN` and the spare counts scale with it, so `PHP_FPM_MAX_CHILDREN=4` just works instead of failing on `max_spare_servers > max_children`. These go to `php-fpm.d/zz-env.conf`; a config you mount there under a name that sorts later (`zz-mysite.conf`) still wins.
+
+## Defaults, 8.2+
+
+The official image is tuned for nothing in particular — 5 workers, interrupted requests on reload. These images ship defaults that sit at ~15 MB idle on a laptop and still hold a mid-traffic site: a corporate site during an ad campaign, a local shop during a sale.
+
+- **FPM:** 12 workers max, 2–5 kept idle (see the table above), each recycled after 500 requests so extension leaks don't pile up. `process_control_timeout = 10s` lets in-flight requests finish on a reload (`USR2`). If 10 workers segfault within a minute, FPM restarts itself. `log_errors` is on, so errors are logged even when they're displayed.
+- **PHP:** `expose_php = Off`. Opcache gets `interned_strings_buffer = 16` and `max_accelerated_files = 20000`; the stock 8 / 10000 runs out on anything with a real `vendor/`.
+
+They live in `conf.d/00-defaults.ini` and `php-fpm.d/zz-defaults.conf`. Env vars and your own files override them.
 
 ## What's inside
 

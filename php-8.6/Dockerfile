@@ -129,6 +129,8 @@ RUN set -eux; \
 
 COPY --from=builder /usr/local /usr/local
 COPY docker-entrypoint.sh /usr/local/bin/
+COPY 00-defaults.ini /usr/local/etc/php/conf.d/
+COPY zz-defaults.conf /usr/local/etc/php-fpm.d/
 
 RUN set -eux; \
     ldconfig; \
@@ -138,6 +140,7 @@ RUN set -eux; \
     chmod 1777 /var/www/html; \
     php -v; \
     php -m; \
+    php-fpm -t; \
     # Пререлизная база меняется каждую неделю и может тихо недосчитаться
     # расширения (так уехал mbstring между 8.5 и 8.6). Лучше упасть тут,
     # чем отдать людям образ без половины обещанного.
