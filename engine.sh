@@ -13,6 +13,7 @@
 #   eng ...                 вызов движка (build/run/tag/push/image inspect — совместимы)
 #   eng_init                выбрать движок; печатает причину и возвращает 1, если нечего выбрать
 #   eng_arch                суффикс архитектуры: amd64 | arm64 | riscv64
+#   eng_pull                флаг для build, чтобы база всегда тянулась из реестра заново
 #   eng_qualify NAME        имя образа, пригодное для пуша этим движком
 #   eng_remote_exists REF   есть ли такой тег в реестре
 #   eng_stitch "TAGS" REFS  склеить мультиарх-манифест и запушить под каждым тегом
@@ -47,6 +48,18 @@ eng_arch() {
         docker) docker version --format '{{.Server.Arch}}' 2>/dev/null ;;
         # у podman нет .Server.Arch, только .Server.OsArch вида "linux/amd64"
         podman) podman version --format '{{.Server.OsArch}}' 2>/dev/null | cut -d/ -f2 ;;
+    esac
+}
+
+# У docker голый --pull значит "всегда тянуть", а у podman — "только если
+# образа нет локально": движущиеся теги (php:8.6-rc-fpm, debian:trixie-slim)
+# там навсегда залипают на первом скачанном образе. Так 8.6-rc на VPS с
+# августа по октябрь собирался из alpha3. А docker не понимает --pull=always:
+# у него этот флаг булевый.
+eng_pull() {
+    case "$ENGINE" in
+        docker) echo --pull ;;
+        podman) echo --pull=always ;;
     esac
 }
 

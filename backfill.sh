@@ -90,7 +90,7 @@ build_one() {
         FAILED=$((FAILED + 1)); return 1
     fi
 
-    if ! eng build --no-cache --pull \
+    if ! eng build --no-cache "$(eng_pull)" \
             --build-arg "PHP_BASE=${base_tag}" \
             -t "$exact_tag" "$php_dir"; then
         error "Failed to build $exact_tag"

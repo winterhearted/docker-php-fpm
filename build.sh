@@ -85,7 +85,7 @@ build_image() {
 
     local build_args="-t $version_tag -t $latest_tag"
     if [ "$USE_CACHE" = "false" ]; then
-        build_args="--no-cache --pull $build_args"
+        build_args="--no-cache $(eng_pull) $build_args"
     fi
 
     if eng build $build_args "$php_dir"; then

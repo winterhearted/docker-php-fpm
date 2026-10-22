@@ -109,7 +109,7 @@ log "Engine: ${ENGINE}   Arch: ${ARCH}   Дата снимка: ${DATE_STAMP}   
 echo "========================================"
 
 # --pull обязателен: базовый тег движущийся, локальная копия почти всегда устарела
-if ! eng build --no-cache --pull \
+if ! eng build --no-cache "$(eng_pull)" \
         --build-arg "PHP_BASE=${BASE_TAG}" \
         -t "$LOCAL_TAG" "$PHP_DIR"; then
     error "Сборка ${LOCAL_TAG} упала"
