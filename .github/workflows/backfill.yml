@@ -12,8 +12,8 @@ on:
       arches:
         description: 'Архитектуры'
         type: choice
-        options: ['amd64 arm64', 'amd64', 'arm64', 'riscv64', 'amd64 arm64 riscv64']
-        default: 'amd64 arm64'
+        options: ['amd64 arm64 riscv64', 'amd64', 'arm64', 'riscv64']
+        default: 'amd64 arm64 riscv64'
       push:
         description: 'Пушить (выключить — только собрать, для пробы)'
         type: boolean

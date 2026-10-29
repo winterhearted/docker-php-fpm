@@ -23,7 +23,7 @@ permissions:
 
 env:
   DOCKERHUB_USER: winterhearted
-  ARCHES: amd64 arm64
+  ARCHES: amd64 arm64 riscv64
 
 jobs:
   plan:

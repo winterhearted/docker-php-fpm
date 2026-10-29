@@ -12,11 +12,11 @@ This README is about building and publishing. For using the images — tags, env
 
 ## How it works
 
-Builds run on GitHub Actions, natively for each architecture: amd64 on `ubuntu-24.04`, arm64 on `ubuntu-24.04-arm` (free for public repos). No QEMU. riscv64 isn't on Actions yet — for now it's still built by a self-hosted board running the same scripts (see [Self-hosted build machine](#self-hosted-build-machine)).
+Builds run on GitHub Actions, natively for each architecture: amd64 on `ubuntu-24.04`, arm64 on `ubuntu-24.04-arm` (both free for public repos), riscv64 on `ubuntu-24.04-riscv` from [RISE RISC-V Runners](https://riscv-runners.riseproject.dev/) (free for open source, needs their GitHub App installed on the account). No QEMU. RISE is a shared pool, so riscv64 jobs may wait in the queue for a while; a full 8.4 build there takes about 20 minutes.
 
 Every build pushes only **arch-suffixed** tags (`8.4.27-amd64`, `8.4-amd64`, …). The plain tags (`8.4.27`, `8.4`, `8.4-latest`) are multi-arch manifests written only by `stitch.sh`, which reads whatever arch tags currently exist in the registry and merges them. Nothing is ever pushed to a plain tag directly — that would overwrite the manifest with a single-arch image.
 
-Because stitching is a pure recalculation from the registry, builders don't coordinate: a self-hosted riscv64 box and the Actions runners publish on their own schedules, and the manifest fills in as each arch catches up.
+Because stitching is a pure recalculation from the registry, builders don't coordinate: runners (or a self-hosted box) publish on their own schedules, and the manifest fills in as each arch catches up.
 
 - `X.Y.Z` is stitched only from arches that built exactly that patch.
 - `X.Y` / `X.Y-latest` is stitched from the newest `X.Y-<arch>` of each arch, so a slow riscv64 never holds amd64/arm64 back.
@@ -91,7 +91,8 @@ The digest compared is the platform manifest's, not the index's: the official in
    ```bash
    gh secret set DOCKERHUB_TOKEN -R winterhearted/docker-php-fpm
    ```
-3. Settings → Actions → General: make sure Actions are allowed. That's it — the Hub username is in the workflows' `env`.
+3. Install the [RISE RISC-V Runners](https://riscv-runners.riseproject.dev/) GitHub App (Personal for a user account) — without it riscv64 jobs queue forever.
+4. Settings → Actions → General: make sure Actions are allowed. That's it — the Hub username is in the workflows' `env`.
 
 ## Manual operations
 
@@ -102,6 +103,7 @@ gh workflow run nightly                                   # run the nightly chec
 gh workflow run nightly -f minors="8.4 8.5"
 gh workflow run backfill -f versions="8.4.18 8.4.19"      # exact patches, X.Y untouched
 gh workflow run backfill -f versions=8.4.27 -f set_moving=true
+gh workflow run backfill -f versions=8.4.27 -f arches=riscv64 -f push=false   # trial build, nothing pushed
 gh workflow run rc -f date=20261019                       # rc snapshot under a specific (UTC) date
 gh workflow run eol -f minors="7.4 8.0"
 gh run watch                                              # follow the latest run
@@ -122,7 +124,7 @@ Force a specific engine with `ENGINE=podman ./…` (podman needs `skopeo` for `c
 
 ## Self-hosted build machine
 
-Until riscv64 moves to Actions, it's built on an Orange Pi RV2 with systemd user timers. Any arch can be built this way; just don't let a self-hosted box and Actions build the same arch.
+Not used at the moment — kept in case some arch has to be built off GitHub again (riscv64 used to be built this way on an Orange Pi RV2). Any arch can be built with systemd user timers; just don't let a self-hosted box and Actions build the same arch.
 
 Needs: docker (with buildx) or podman + skopeo, `git`, `curl`, `python3`, and `docker login` / `podman login` with push access to `winterhearted/php-fpm`.
 
