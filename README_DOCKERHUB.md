@@ -85,7 +85,7 @@ Run `php -m` if you want the exact list for a given tag.
 
 ## Heads up
 
-8.2–8.5 are built in two stages: extensions get compiled in a throwaway builder, the final image is plain Debian plus the finished PHP. Much smaller, but no compiler in there — `docker-php-ext-install` in a derived image won't work. Everything you'd normally add is already baked in; if something's genuinely missing, open an issue.
+8.2–8.5 are built in two stages: extensions get compiled in a throwaway builder, the final image is plain Debian plus the finished PHP. Much smaller, but no compiler in there — `docker-php-ext-install` in a derived image won't work. Everything you'd normally add is already baked in; if something's genuinely missing, [open an issue](https://github.com/winterhearted/docker-php-fpm/issues).
 
 riscv64 sometimes trails the other arches by a patch. Moving tags like `8.4` don't wait for it — you may get a slightly older build there.
 
