@@ -50,6 +50,7 @@ php-X.Y/
   rc.yml                 weekly: 8.6-rc
   backfill.yml           manual: exact patches
   eol.yml                manual: whole EOL branches (5.3–8.1)
+  hub-description.yml    README_DOCKERHUB.md → Docker Hub description
 engine.sh                docker/podman abstraction, sourced by every script
 hub.py                   Docker Hub API queries: upstream patches/digests, our newest tags
 architectures.conf       arches stitch.sh merges
@@ -73,6 +74,7 @@ Variants are discovered by file: drop a `Dockerfile.<name>` into `php-X.Y/` and 
 | `rc` | Mondays 04:00 UTC | `build-rc.sh` on each arch → one stitch |
 | `backfill` | manual | `backfill.sh` for given patches on chosen arches → stitch |
 | `eol` | manual | `build.sh` + `push.sh` for given branches → stitch |
+| `hub-description` | push to `README_DOCKERHUB.md` | copies it to the Docker Hub description |
 
 Every workflow has the same shape: a matrix job per architecture that only pushes `-<arch>` tags, then a single `stitch` job after all of them (if each build stitched on its own, parallel runners would overwrite each other's manifests).
 

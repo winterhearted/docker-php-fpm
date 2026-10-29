@@ -1,0 +1,25 @@
+name: hub-description
+
+# README_DOCKERHUB.md — это описание образа на Docker Hub. Раньше его вставляли
+# туда руками и регулярно забывали.
+
+on:
+  push:
+    branches: [main]
+    paths: [README_DOCKERHUB.md]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  update:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: peter-evans/dockerhub-description@v4
+        with:
+          username: winterhearted
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: winterhearted/php-fpm
+          readme-filepath: ./README_DOCKERHUB.md
