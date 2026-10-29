@@ -4,6 +4,8 @@ PHP-FPM with the extensions you'd end up installing anyway, already in. Tune it 
 
 Built at the [byte0.org](https://byte0.org) lab for internal use at [Pantera](https://pantera.kz), a web studio. Public because there's no reason not to be.
 
+Source and build pipeline: [winterhearted/docker-php-fpm](https://github.com/winterhearted/docker-php-fpm). riscv64 images are built natively on [RISE RISC-V Runners](https://riscv-runners.riseproject.dev/), free RISC-V CI for open source — thanks to them.
+
 ## Run it
 
 ```bash
