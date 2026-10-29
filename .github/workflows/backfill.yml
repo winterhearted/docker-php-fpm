@@ -12,8 +12,12 @@ on:
       arches:
         description: 'Архитектуры'
         type: choice
-        options: ['amd64 arm64', 'amd64', 'arm64']
+        options: ['amd64 arm64', 'amd64', 'arm64', 'riscv64', 'amd64 arm64 riscv64']
         default: 'amd64 arm64'
+      push:
+        description: 'Пушить (выключить — только собрать, для пробы)'
+        type: boolean
+        default: true
       set_moving:
         description: 'Сдвинуть X.Y на эти патчи (только для головы ветки!)'
         type: boolean
@@ -56,7 +60,7 @@ jobs:
   build:
     needs: setup
     name: build ${{ matrix.arch }}
-    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || matrix.arch == 'riscv64' && 'ubuntu-24.04-riscv' || 'ubuntu-24.04' }}
     timeout-minutes: 300
     strategy:
       fail-fast: false
@@ -71,14 +75,16 @@ jobs:
       - env:
           VERSIONS: ${{ inputs.versions }}
           SET_MOVING: ${{ inputs.set_moving }}
+          PUSH: ${{ inputs.push }}
         run: |
           flags=()
           [ "$SET_MOVING" = true ] && flags+=(--set-moving)
+          [ "$PUSH" = true ] || flags+=(--build-only)
           ./backfill.sh "${flags[@]}" $VERSIONS
 
   stitch:
     needs: [setup, build]
-    if: ${{ !cancelled() && inputs.stitch }}
+    if: ${{ !cancelled() && inputs.stitch && inputs.push }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5

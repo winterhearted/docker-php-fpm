@@ -38,7 +38,7 @@ jobs:
   build:
     needs: setup
     name: build ${{ matrix.arch }}
-    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || matrix.arch == 'riscv64' && 'ubuntu-24.04-riscv' || 'ubuntu-24.04' }}
     timeout-minutes: 120
     strategy:
       fail-fast: false
