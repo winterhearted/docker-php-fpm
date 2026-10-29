@@ -8,6 +8,12 @@ set -e
 # явно не попросили --set-moving. Нужно для добора исторических патчей "для
 # чистоты" и для точечной сборки/теста конкретной версии.
 #
+# База пинится по дайджесту платформенного манифеста, и этот дайджест пишется
+# в лейбл BASE_DIGEST_LABEL — по нему check-updates.sh потом понимает, что
+# upstream пересобрал базу без бампа патча. Дайджест можно передать сразу
+# (VERSION@sha256:..., так делает check-updates.sh, чтобы собрать ровно то,
+# что он проверял), иначе спросим у Hub сами.
+#
 # Тег без суффикса архитектуры (X.Y.Z, X.Y) пушит ТОЛЬКО stitch.sh — если
 # запушить его отсюда напрямую, он перезатрёт мультиарх-манифест
 # single-arch образом. См. architectures.conf и stitch.sh.
@@ -17,6 +23,7 @@ cd "$SCRIPT_DIR"
 
 IMAGE_NAME="winterhearted/php-fpm"
 DOCKERFILE_NAME="Dockerfile"
+BASE_DIGEST_LABEL="org.opencontainers.image.base.digest"
 ARCH=""
 SET_MOVING=false
 STITCH=false
@@ -51,7 +58,7 @@ SUCCESSFUL=0
 FAILED=0
 
 usage() {
-    echo "Usage: $0 [OPTIONS] VERSION [VERSION...]"
+    echo "Usage: $0 [OPTIONS] VERSION[@DIGEST] [VERSION[@DIGEST]...]"
     echo ""
     echo "Build exact PHP patch versions and push the X.Y.Z-<arch> tag."
     echo ""
@@ -70,7 +77,8 @@ usage() {
 }
 
 build_one() {
-    local version=$1
+    local version=${1%@*} digest=""
+    [[ "$1" == *@* ]] && digest=${1#*@}
     local minor="${version%.*}"          # 8.4.19 -> 8.4
     local php_dir="php-${minor}"
     local base_tag="${version}-fpm"       # php:8.4.19-fpm
@@ -90,8 +98,21 @@ build_one() {
         FAILED=$((FAILED + 1)); return 1
     fi
 
+    if [ -z "$digest" ]; then
+        digest=$(./hub.py digest "$version" "$ARCH" 2>/dev/null || true)
+    fi
+    local base_args=(--build-arg "PHP_BASE=${base_tag}")
+    if [ -n "$digest" ]; then
+        log "База php:${base_tag}@${digest}"
+        base_args=(--build-arg "PHP_BASE=${base_tag}@${digest}"
+                   --label "${BASE_DIGEST_LABEL}=${digest}")
+    else
+        # без лейбла check-updates.sh ночью пересоберёт этот патч — не страшно
+        warning "Не узнала дайджест php:${base_tag} для ${ARCH}, собираю без пина"
+    fi
+
     if ! eng build --no-cache "$(eng_pull)" \
-            --build-arg "PHP_BASE=${base_tag}" \
+            "${base_args[@]}" \
             -t "$exact_tag" "$php_dir"; then
         error "Failed to build $exact_tag"
         FAILED=$((FAILED + 1)); return 1
@@ -205,8 +226,8 @@ fi
 
 # Валидация формата X.Y.Z
 for v in "${VERSIONS[@]}"; do
-    if ! [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-        error "Invalid version '$v' (expected X.Y.Z, e.g. 8.4.19)"; exit 1
+    if ! [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+(@sha256:[0-9a-f]{64})?$ ]]; then
+        error "Invalid version '$v' (expected X.Y.Z or X.Y.Z@sha256:..., e.g. 8.4.19)"; exit 1
     fi
 done
 

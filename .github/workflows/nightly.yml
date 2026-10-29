@@ -1,0 +1,108 @@
+name: nightly
+
+# Новые патчи 8.2–8.5 и пересобранные upstream базы. Что собирать, решает
+# check-updates.sh --plan по реестрам, своего состояния у workflow нет.
+# Каждая архитектура собирается нативно на своём раннере, склейка — одна, в конце.
+
+on:
+  schedule:
+    - cron: '0 21 * * *'   # 03:00 Asia/Almaty
+  workflow_dispatch:
+    inputs:
+      minors:
+        description: 'Ветки через пробел (пусто — все, что в check-updates.sh)'
+        required: false
+        default: ''
+
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  DOCKERHUB_USER: winterhearted
+  ARCHES: amd64 arm64
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      stitch: ${{ steps.plan.outputs.stitch }}
+    steps:
+      - uses: actions/checkout@v5
+      # анонимно Hub режет запросы по IP, а IP у раннеров общие
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ env.DOCKERHUB_USER }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - id: plan
+        env:
+          MINORS: ${{ inputs.minors }}
+        run: |
+          rc=0
+          ./check-updates.sh --plan $(printf -- '--arch %s ' $ARCHES) $MINORS > plan.txt || rc=$?
+          cat plan.txt
+          echo "matrix=$(jq -Rsc 'split("\n") | map(select(length > 0) | split(" ")
+              | {arch: .[0], version: .[1], digest: .[2], moving: (.[3] == "1")})' plan.txt)" >> "$GITHUB_OUTPUT"
+          # склеить каждый собранный X.Y.Z, а где двигали X.Y — и его
+          echo "stitch=$(awk '{print $2} $4 == 1 {sub(/\.[0-9]+$/, "", $2); print $2}' plan.txt | sort -uV | xargs)" >> "$GITHUB_OUTPUT"
+          # план по остальным веткам всё равно отдаём, а job краснеет
+          exit $rc
+
+  build:
+    needs: plan
+    if: ${{ !cancelled() && needs.plan.outputs.matrix != '' && needs.plan.outputs.matrix != '[]' }}
+    name: ${{ matrix.version }} ${{ matrix.arch }}
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ env.DOCKERHUB_USER }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - env:
+          VERSION: ${{ matrix.version }}@${{ matrix.digest }}
+          MOVING: ${{ matrix.moving }}
+        run: |
+          flags=()
+          [ "$MOVING" = true ] && flags+=(--set-moving)
+          ./backfill.sh "${flags[@]}" "$VERSION"
+
+  # Отдельно и после всех: если склеивать из каждой сборки, параллельные
+  # раннеры перезаписывают манифест друг за другом и кто-то теряется
+  stitch:
+    needs: [plan, build]
+    if: ${{ !cancelled() && needs.plan.outputs.stitch != '' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ env.DOCKERHUB_USER }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - env:
+          STITCH: ${{ needs.plan.outputs.stitch }}
+        run: ./stitch.sh --with-variants $STITCH
+
+  # GitHub выключает cron в публичных репо после 60 дней без коммитов.
+  # Повторное включение через API сбрасывает этот счётчик, а nightly ходит
+  # каждый день — так расписание живёт, пока в репо никто не заглядывает.
+  keepalive:
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for wf in nightly.yml rc.yml; do
+            gh api -X PUT "repos/$GITHUB_REPOSITORY/actions/workflows/$wf/enable"
+          done

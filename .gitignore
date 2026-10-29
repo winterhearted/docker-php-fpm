@@ -14,9 +14,3 @@ Thumbs.db
 
 # Logs
 *.log
-
-# Состояние конкретной машины (последний собранный патч и дайджесты базы) —
-# у каждой сборочной машины своё
-.build-state
-.build-state.tmp
-.base-digests.state

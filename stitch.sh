@@ -36,13 +36,24 @@ warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
 
 source "$SCRIPT_DIR/engine.sh"
 
+# Варианты ветки — php-X.Y/Dockerfile.<variant>, как в остальных скриптах
+list_variants() {
+    local php_dir=$1 f
+    for f in "$php_dir"/Dockerfile.*; do
+        [ -f "$f" ] || continue
+        echo "${f##*/Dockerfile.}"
+    done
+}
+
 usage() {
-    echo "Usage: $0 [-n NAME] [--no-latest] VERSION [VERSION...]"
+    echo "Usage: $0 [-n NAME] [--no-latest] [--with-variants] VERSION [VERSION...]"
     echo ""
     echo "  VERSION      X.Y (минорный, движущийся тег + -latest) или X.Y.Z (точный патч),"
     echo "               с необязательным суффиксом варианта: X.Y-vips, X.Y.Z-vips"
     echo "  -n, --name   Base image name (default: winterhearted/php-fpm)"
     echo "  --no-latest  Не создавать алиас X.Y-latest (для пререлизных тегов)"
+    echo "  --with-variants  К каждой VERSION добавить VERSION-<variant> для всех"
+    echo "               php-X.Y/Dockerfile.<variant> её ветки"
     echo ""
     echo "Examples:"
     echo "  $0 8.4              # склеить движущийся тег 8.4 / 8.4-latest"
@@ -50,14 +61,17 @@ usage() {
     echo "  $0 8.3 8.3.32       # оба сразу"
     echo "  $0 8.3-vips         # вариант: 8.3-vips / 8.3-latest-vips"
     echo "  $0 --no-latest 8.6-rc   # только 8.6-rc, без алиаса 8.6-latest-rc"
+    echo "  $0 --with-variants 8.4 8.4.27   # плюс 8.4-vips и 8.4.27-vips"
 }
 
 VERSIONS=()
 NO_LATEST=false
+WITH_VARIANTS=false
 while [[ $# -gt 0 ]]; do
     case $1 in
         -n|--name) IMAGE_NAME="$2"; shift 2 ;;
         --no-latest) NO_LATEST=true; shift ;;
+        --with-variants) WITH_VARIANTS=true; shift ;;
         -h|--help) usage; exit 0 ;;
         -*)        error "Unknown option: $1"; usage; exit 1 ;;
         *)         VERSIONS+=("$1"); shift ;;
@@ -65,6 +79,18 @@ while [[ $# -gt 0 ]]; do
 done
 
 [ ${#VERSIONS[@]} -eq 0 ] && { error "No version specified"; usage; exit 1; }
+
+if [ "$WITH_VARIANTS" = true ]; then
+    expanded=()
+    for v in "${VERSIONS[@]}"; do
+        expanded+=("$v")
+        [[ "$v" =~ ^([0-9]+\.[0-9]+) ]] || continue
+        for variant in $(list_variants "php-${BASH_REMATCH[1]}"); do
+            expanded+=("${v}-${variant}")
+        done
+    done
+    VERSIONS=("${expanded[@]}")
+fi
 [ -f "$ARCH_FILE" ] || { error "Не найден $ARCH_FILE"; exit 1; }
 
 eng_init || exit 1

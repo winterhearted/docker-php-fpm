@@ -1,0 +1,91 @@
+name: backfill
+
+# Ручная сборка конкретных патчей 8.2+ — то же, что ./backfill.sh на машине,
+# только сразу под все выбранные архитектуры.
+
+on:
+  workflow_dispatch:
+    inputs:
+      versions:
+        description: 'Патчи через пробел, напр. 8.4.18 8.4.19'
+        required: true
+      arches:
+        description: 'Архитектуры'
+        type: choice
+        options: ['amd64 arm64', 'amd64', 'arm64']
+        default: 'amd64 arm64'
+      set_moving:
+        description: 'Сдвинуть X.Y на эти патчи (только для головы ветки!)'
+        type: boolean
+        default: false
+      stitch:
+        description: 'Склеить мультиарх-манифесты'
+        type: boolean
+        default: true
+
+concurrency:
+  group: backfill
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  DOCKERHUB_USER: winterhearted
+
+jobs:
+  setup:
+    runs-on: ubuntu-24.04
+    outputs:
+      arches: ${{ steps.setup.outputs.arches }}
+      stitch: ${{ steps.setup.outputs.stitch }}
+    steps:
+      - id: setup
+        env:
+          ARCHES: ${{ inputs.arches }}
+          VERSIONS: ${{ inputs.versions }}
+          SET_MOVING: ${{ inputs.set_moving }}
+        run: |
+          echo "arches=$(jq -nc --arg a "$ARCHES" '$a | split(" ")')" >> "$GITHUB_OUTPUT"
+          list=$(for v in $VERSIONS; do
+            echo "$v"
+            [ "$SET_MOVING" = true ] && echo "${v%.*}"
+          done | sort -uV | xargs)
+          echo "stitch=$list" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: setup
+    name: build ${{ matrix.arch }}
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: ${{ fromJSON(needs.setup.outputs.arches) }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ env.DOCKERHUB_USER }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - env:
+          VERSIONS: ${{ inputs.versions }}
+          SET_MOVING: ${{ inputs.set_moving }}
+        run: |
+          flags=()
+          [ "$SET_MOVING" = true ] && flags+=(--set-moving)
+          ./backfill.sh "${flags[@]}" $VERSIONS
+
+  stitch:
+    needs: [setup, build]
+    if: ${{ !cancelled() && inputs.stitch }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ env.DOCKERHUB_USER }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - env:
+          STITCH: ${{ needs.setup.outputs.stitch }}
+        run: ./stitch.sh --with-variants $STITCH

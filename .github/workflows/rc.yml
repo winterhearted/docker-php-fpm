@@ -1,0 +1,69 @@
+name: rc
+
+# Еженедельная пересборка пререлиза (8.6-rc) — безусловно, см. build-rc.sh.
+
+on:
+  schedule:
+    - cron: '0 4 * * 1'    # понедельник 09:00 Asia/Almaty
+  workflow_dispatch:
+    inputs:
+      date:
+        description: 'Дата снимка YYYYMMDD (пусто — сегодня по UTC)'
+        required: false
+        default: ''
+
+concurrency:
+  group: rc
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  DOCKERHUB_USER: winterhearted
+
+jobs:
+  # Дата одна на все архитектуры: раннеры могут закончить по разные стороны
+  # полуночи, а склейка ищет одинаковый тег снимка
+  setup:
+    runs-on: ubuntu-24.04
+    outputs:
+      date: ${{ steps.date.outputs.date }}
+    steps:
+      - id: date
+        env:
+          DATE: ${{ inputs.date }}
+        run: echo "date=${DATE:-$(date -u +%Y%m%d)}" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: setup
+    name: build ${{ matrix.arch }}
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ env.DOCKERHUB_USER }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - env:
+          DATE: ${{ needs.setup.outputs.date }}
+        run: ./build-rc.sh --no-stitch --date "$DATE"
+
+  stitch:
+    needs: [setup, build]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ env.DOCKERHUB_USER }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - env:
+          DATE: ${{ needs.setup.outputs.date }}
+        run: ./build-rc.sh --stitch-only --date "$DATE"

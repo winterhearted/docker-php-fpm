@@ -23,10 +23,10 @@ set -e
 # оставаться пустыми до релиза — иначе кто-нибудь притянет альфу, думая, что
 # это стабильная ветка.
 #
-# Дата в теге — UTC, а не локальная. Все три машины ходят по таймеру в 03:00
-# Алматы (= 21:00 UTC предыдущего дня), так что в UTC дата у них совпадает,
-# и склейка находит соседей. По локальному времени машины в разных TZ дали бы
-# разные теги и три однoархитектурных снимка вместо одного.
+# Дата в теге — UTC, а не локальная: машины в разных TZ иначе дали бы разные
+# теги и несколько однoархитектурных снимков вместо одного. В GitHub Actions
+# дату вообще считают один раз и раздают всем архитектурам через --date —
+# сборки на разных раннерах могут закончиться по разные стороны полуночи.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
@@ -38,6 +38,7 @@ RC_TAG="8.6-rc"           # как это называется у нас
 ARCH=""
 PUSH=true
 STITCH=true
+STITCH_ONLY=false
 DATE_STAMP=""
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; NC='\033[0m'
@@ -69,6 +70,8 @@ usage() {
     echo "  -a, --arch ARCH    Arch suffix (default: движок сам скажет свою)"
     echo "  -b, --build-only   Собрать локально, не пушить (подразумевает --no-stitch)"
     echo "  --no-stitch        Не звать stitch.sh после пуша"
+    echo "  --stitch-only      Ничего не собирать, только склеить ${RC_TAG} и снимок"
+    echo "                     на --date из уже запушенных арх-тегов"
     echo "  --date YYYYMMDD    Дата для снимка (default: сегодня по UTC)"
     echo "  -h, --help         Show this help"
 }
@@ -79,6 +82,7 @@ while [[ $# -gt 0 ]]; do
         -a|--arch)       ARCH="$2"; shift 2 ;;
         -b|--build-only) PUSH=false; STITCH=false; shift ;;
         --no-stitch)     STITCH=false; shift ;;
+        --stitch-only)   STITCH_ONLY=true; shift ;;
         --date)          DATE_STAMP="$2"; shift 2 ;;
         -h|--help)       usage; exit 0 ;;
         *)               error "Unknown option: $1"; usage; exit 1 ;;
@@ -93,6 +97,12 @@ fi
 PHP_DIR="php-${MINOR}"
 [ -d "$PHP_DIR" ] || { error "Нет каталога $PHP_DIR"; exit 1; }
 [ -f "$PHP_DIR/Dockerfile" ] || { error "Нет $PHP_DIR/Dockerfile"; exit 1; }
+
+# Для CI: каждая архитектура собирается на своём раннере с --no-stitch, а
+# склейка — одна, после всех
+if [ "$STITCH_ONLY" = true ]; then
+    exec ./stitch.sh -n "$IMAGE_NAME" --no-latest --with-variants "${RC_TAG}" "${RC_TAG}-${DATE_STAMP}"
+fi
 
 eng_init || exit 1
 IMAGE_NAME=$(eng_qualify "$IMAGE_NAME")

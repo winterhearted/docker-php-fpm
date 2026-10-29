@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# Слой над контейнерным движком: на одноплатниках стоит docker, на VPS —
-# rootless podman. Скрипты сборки держим одинаковыми на всех машинах (см.
-# комментарий в architectures.conf), движок выбирается здесь на месте.
+# Слой над контейнерным движком: в GitHub Actions и на одноплатниках docker,
+# на машинах с rootless podman — podman. Скрипты одни и те же везде, движок
+# выбирается здесь на месте.
 #
 # Подключать после того, как в скрипте определены log/error/warning:
 #   source "$SCRIPT_DIR/engine.sh"
@@ -16,6 +16,7 @@
 #   eng_pull                флаг для build, чтобы база всегда тянулась из реестра заново
 #   eng_qualify NAME        имя образа, пригодное для пуша этим движком
 #   eng_remote_exists REF   есть ли такой тег в реестре
+#   eng_remote_label REF ARCH KEY  значение лейбла у образа в реестре (пусто, если нет)
 #   eng_stitch "TAGS" REFS  склеить мультиарх-манифест и запушить под каждым тегом
 #   eng_cleanup REF...      удалить локальные образы после пуша и подчистить кеш сборки
 
@@ -93,6 +94,35 @@ eng_remote_exists() {
             podman manifest add --all "$list" "$1" &>/dev/null || rc=1
             podman manifest rm "$list" &>/dev/null || true
             return $rc
+            ;;
+    esac
+}
+
+# Конфиг образа читается прямо из реестра, без pull. Арх-теги бывают и
+# одиночным манифестом (podman, docker без containerd-хранилища), и индексом
+# с attestation (buildx) — разбираем оба.
+eng_remote_label() {
+    local ref=$1 arch=$2 key=$3
+    case "$ENGINE" in
+        docker)
+            docker buildx imagetools inspect "$ref" --format '{{json .Image}}' 2>/dev/null \
+            | python3 -c '
+import sys, json
+arch, key = sys.argv[1:]
+d = json.load(sys.stdin)
+if "config" not in d:
+    d = next((v for k, v in d.items() if k.startswith("linux/" + arch)), {})
+print(((d.get("config") or {}).get("Labels") or {}).get(key, ""))
+' "$arch" "$key"
+            ;;
+        # podman читать чужие манифесты не умеет, а skopeo ставится рядом с ним
+        podman)
+            command -v skopeo &>/dev/null || { echo "[ERROR] для podman нужен skopeo" >&2; return 1; }
+            skopeo inspect --override-os linux --override-arch "$arch" "docker://$ref" 2>/dev/null \
+            | python3 -c '
+import sys, json
+print((json.load(sys.stdin).get("Labels") or {}).get(sys.argv[1], ""))
+' "$key"
             ;;
     esac
 }

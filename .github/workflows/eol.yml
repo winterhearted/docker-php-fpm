@@ -1,0 +1,81 @@
+name: eol
+
+# Ручная пересборка целых веток через build.sh + push.sh — для EOL 5.3–8.1,
+# у которых нет ARG PHP_BASE и точечный backfill не работает.
+
+on:
+  workflow_dispatch:
+    inputs:
+      minors:
+        description: 'Ветки через пробел, напр. 7.4 8.0'
+        required: true
+      arches:
+        description: 'Архитектуры (старые php:X.Y-fpm есть не под все)'
+        type: choice
+        options: ['amd64', 'arm64', 'amd64 arm64']
+        default: 'amd64'
+
+concurrency:
+  group: eol
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  DOCKERHUB_USER: winterhearted
+
+jobs:
+  setup:
+    runs-on: ubuntu-24.04
+    outputs:
+      arches: ${{ steps.setup.outputs.arches }}
+    steps:
+      - id: setup
+        env:
+          ARCHES: ${{ inputs.arches }}
+        run: echo "arches=$(jq -nc --arg a "$ARCHES" '$a | split(" ")')" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: setup
+    name: build ${{ matrix.arch }}
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: ${{ fromJSON(needs.setup.outputs.arches) }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ env.DOCKERHUB_USER }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - env:
+          MINORS: ${{ inputs.minors }}
+        run: ./build.sh $MINORS && ./push.sh $MINORS
+
+  # Точный патч у всех архитектур один (EOL-базы не меняются), но
+  # узнаём его из реестра, а не из сборки — тогда склейка не зависит от того,
+  # какие раннеры успели
+  stitch:
+    needs: build
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ env.DOCKERHUB_USER }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - env:
+          MINORS: ${{ inputs.minors }}
+        run: |
+          list=()
+          for m in $MINORS; do
+            list+=("$m")
+            for a in $(grep -vE '^\s*(#|$)' architectures.conf); do
+              list+=($(./hub.py ours winterhearted/php-fpm "$m" "$a"))
+            done
+          done
+          ./stitch.sh --with-variants $(printf '%s\n' "${list[@]}" | sort -uV)
